@@ -9,7 +9,7 @@ from collections import defaultdict
 
 from aiogram import Router, F, Bot
 from aiogram.types import Message
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command
 
 from database import db
 from game.poker import PokerGame, GameStatus
@@ -24,6 +24,7 @@ from ui.keyboards import get_waiting_keyboard, get_table_settings_keyboard, get_
 from config import config
 from utils.helpers import get_display_name, get_mention, create_callback_data
 from utils.permissions import can_manage_table, is_admin
+from services.game_registry import user_has_active_session
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -120,22 +121,6 @@ async def save_game(game: PokerGame) -> None:
             is_active=player.is_active
         )
         await db.set_balance(player.user_id, player.balance)
-
-
-@router.message(CommandStart())
-async def cmd_start(message: Message) -> None:
-    user_id = message.from_user.id
-    username = message.from_user.username
-    first_name = message.from_user.first_name
-
-    user = await db.get_or_create_user(user_id, username, first_name)
-
-    await message.answer(
-        f"🃏 <b>Добро пожаловать в Техасский Холдем!</b>\n\n"
-        f"Ваш баланс: <b>{user['balance']:,}</b> 🪙\n\n"
-        f"Используйте /poker в групповом чате, чтобы создать стол.\n"
-        f"Команда /help покажет правила игры."
-    )
 
 
 @router.message(Command("poker"))
@@ -418,6 +403,10 @@ async def cmd_give(message: Message) -> None:
     chat_id = message.chat.id
 
     args = message.text.split()[1:] if len(message.text.split()) > 1 else []
+
+    if user_has_active_session(user_id):
+        await message.answer("⚠️ Нельзя передавать фишки во время активной игры.")
+        return
 
     if not args:
         await message.answer("⚠️ Использование: /give @username сумма")

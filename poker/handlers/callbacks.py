@@ -4,10 +4,16 @@
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Optional
 
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery
+from aiogram.types import (
+    BufferedInputFile,
+    CallbackQuery,
+    FSInputFile,
+    InputMediaPhoto,
+)
 
 from database import db
 from game.poker import PokerGame, GameStatus
@@ -27,9 +33,13 @@ from ui.keyboards import (
 from config import config
 from utils.helpers import parse_callback_data, get_display_name, format_chips
 from utils.permissions import can_manage_table
+from services.game_registry import register_session, clear_session
+from services.graphics import generate_poker_table
 
 logger = logging.getLogger(__name__)
 router = Router()
+ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
+DEALER_IDLE = ASSETS_DIR / "dealer" / "idle.jpg"
 
 # Хранилище таймеров ходов
 turn_timers: dict[int, asyncio.Task] = {}
@@ -299,17 +309,34 @@ async def start_game(bot: Bot, chat_id: int, game: PokerGame) -> None:
     for p in game.players:
         p.is_active = True
 
+    register_session(game.game_id, "poker", [p.user_id for p in game.players])
     game.start_hand()
     await save_game(game)
     await update_game_message(bot, game)
     await start_turn_timer(bot, game)
 
 
+def _build_table_media(game: PokerGame, caption: str) -> InputMediaPhoto:
+    """Сформировать медиа с текущим состоянием стола."""
+
+    if game.status in [GameStatus.WAITING, GameStatus.FINISHED]:
+        return InputMediaPhoto(media=FSInputFile(DEALER_IDLE), caption=caption)
+
+    buffer = generate_poker_table(game.community_cards)
+    return InputMediaPhoto(
+        media=BufferedInputFile(buffer.getvalue(), filename="table.jpg"),
+        caption=caption,
+    )
+
+
 async def update_game_message(bot: Bot, game: PokerGame, time_remaining: int = None) -> None:
     """Обновить сообщение игры"""
-    
+
     if time_remaining is None:
         time_remaining = config.TURN_TIMEOUT
+
+    if game.status in [GameStatus.WAITING, GameStatus.FINISHED]:
+        clear_session(game.game_id)
     
     # SHOWDOWN или FINISHED (после showdown) - показываем результаты вскрытия
     if game.status in [GameStatus.SHOWDOWN, GameStatus.FINISHED] and game.pot_distributed:
@@ -440,12 +467,14 @@ async def update_game_message(bot: Bot, game: PokerGame, time_remaining: int = N
         else:
             keyboard = get_spectator_keyboard(game.game_id)
     
+    media = _build_table_media(game, msg_text)
+
     try:
-        await bot.edit_message_text(
+        await bot.edit_message_media(
             chat_id=game.chat_id,
             message_id=game.message_id,
-            text=msg_text,
-            reply_markup=keyboard
+            media=media,
+            reply_markup=keyboard,
         )
     except Exception as e:
         logger.warning(f"Ошибка обновления сообщения: {e}")

@@ -108,8 +108,10 @@ async def main() -> None:
     # Импортируем и регистрируем роутеры
     try:
         from handlers.commands import router as commands_router
+        from handlers.menu import router as menu_router
         from handlers.callbacks import router as callbacks_router
 
+        dp.include_router(menu_router)
         dp.include_router(commands_router)
         dp.include_router(callbacks_router)
         print("3. Роутеры подключены!")

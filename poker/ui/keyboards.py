@@ -10,6 +10,35 @@ from config import config
 from utils.helpers import create_callback_data, format_chips
 
 
+def get_main_menu_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🃏 Покер", callback_data="games:poker_menu"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="🎰 Слоты", callback_data="games:slots"),
+        InlineKeyboardButton(text="⚫️ Блекджек", callback_data="games:blackjack"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="💰 Баланс", callback_data="games:balance"),
+    )
+    return builder.as_markup()
+
+
+def get_poker_menu_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.row(
+        InlineKeyboardButton(text="🎮 Создать стол", callback_data="poker:create"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="🔍 Найти активный стол", callback_data="poker:table"),
+    )
+    builder.row(
+        InlineKeyboardButton(text="↩️ Назад", callback_data="games:back"),
+    )
+    return builder.as_markup()
+
+
 def get_waiting_keyboard(game_id: int, players_count: int) -> InlineKeyboardMarkup:
     """Клавиатура ожидания игроков"""
     builder = InlineKeyboardBuilder()
